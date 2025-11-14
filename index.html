@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Leitor de PDF Interativo com Gemini (Scroll)</title>
+    <!-- 1. Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="styles.css">
+
+    <!-- 2. PDF.js Core -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.11.338/pdf.min.js"></script>
+    
+    <!-- 3. PDF.js Viewer -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.11.338/pdf_viewer.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.11.338/pdf_viewer.js"></script>
+   
+</head>
+<body class="p-4 md:p-8">
+
+    <div class="max-w-5xl mx-auto bg-white p-6 rounded-lg shadow-lg">
+        <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-4 gap-4">
+            <div>
+                <h1 class="text-3xl font-bold text-gray-800">Leitor Inteligente</h1>
+                <p class="text-gray-500 text-sm">PDF + Gemini Vision (Scroll Contínuo)</p>
+            </div>
+
+            <!-- Alternador de Modo -->
+            <div class="flex bg-gray-100 p-1 rounded-lg">
+                <button id="mode-text" class="px-4 py-2 rounded-md text-sm font-medium transition-colors bg-white text-blue-600 shadow-sm">
+                    Texto (Selecionar)
+                </button>
+                <button id="mode-area" class="px-4 py-2 rounded-md text-sm font-medium text-gray-600 hover:text-gray-800 transition-colors">
+                    Área (Desenhar)
+                </button>
+            </div>
+        </div>
+
+        <!-- Input e Controles -->
+        <div class="flex items-center gap-4 mb-4">
+            <div class="flex-grow">
+                <input type="file" id="pdf-upload" accept=".pdf" class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"/>
+            </div>
+            
+            <!-- PAGINAÇÃO REMOVIDA -->
+        </div>
+
+        <div id="loader" class="hidden text-center py-4">
+            <span class="text-blue-600 font-medium">Processando PDF (Carregando todas as páginas...)</span>
+        </div>
+
+        <!-- Visualizador -->
+        <!-- MUDANÇA: O container agora vai receber MÚLTIPLAS páginas -->
+        <div id="viewer-container" class="hidden shadow-inner relative">
+             <!-- As páginas (page-container) serão injetadas aqui via JS -->
+        </div>
+    </div>
+
+    <!-- Tooltip Flutuante (Texto) -->
+    <!-- MUDANÇA: Adicionados botões [+] e Limpar -->
+    <div id="tooltip-text" class="hidden absolute z-50 bg-gray-900 text-white rounded-lg shadow-xl overflow-hidden flex">
+        <button id="btn-explain" class="px-4 py-2 hover:bg-gray-700 border-r border-gray-600 text-sm">Explicar</button>
+        <button id="btn-note" class="px-4 py-2 hover:bg-gray-700 border-r border-gray-600 text-sm">Nota</button>
+        <button id="btn-add" class="px-4 py-2 hover:bg-blue-600 border-r border-gray-600 text-sm text-blue-300">[+] Adicionar</button>
+        <button id="btn-clear" class="px-4 py-2 hover:bg-red-600 text-sm text-red-300 hidden">Limpar</button>
+    </div>
+
+    <!-- Tooltip Flutuante (Área) -->
+    <!-- MUDANÇA: Adicionados botões [+] e Limpar, e display: flex -->
+    <div id="tooltip-area" class="hidden absolute z-50 flex items-center gap-2">
+        <button id="btn-analyze-area" class="bg-blue-600 text-white px-4 py-2 rounded-full shadow-lg hover:bg-blue-700 font-medium text-sm flex items-center gap-2">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
+            <!-- MUDANÇA: Adicionado span para texto dinâmico -->
+            <span id="btn-analyze-text">Analisar Área</span>
+        </button>
+        <button id="btn-add-area" class="bg-gray-700 text-white px-3 py-2 rounded-full shadow-lg hover:bg-gray-800 font-medium text-sm">
+            [+] Adicionar
+        </button>
+        <button id="btn-clear-area" class="hidden bg-red-600 text-white px-3 py-2 rounded-full shadow-lg hover:bg-red-700 font-medium text-sm">
+            Limpar
+        </button>
+    </div>
+
+    <!-- Modal (Sem mudanças) -->
+    <div id="modal-overlay" class="hidden fixed inset-0 z-50 bg-black bg-opacity-60 flex items-center justify-center p-4">
+        <div id="modal-content" class="bg-white w-full max-w-2xl rounded-lg shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+            
+            <div id="modal-header" class="flex justify-between items-center p-4 border-b border-gray-200 bg-gray-50 cursor-move">
+                <h3 id="modal-title" class="text-lg font-semibold text-gray-800">Resultado</h3>
+                <button id="modal-close" class="text-gray-400 hover:text-gray-600 text-2xl">&times;</button>
+            </div>
+
+            <div id="modal-input-area" class="hidden p-4 border-b border-gray-100 bg-blue-50">
+                <label class="block text-xs font-bold text-blue-800 uppercase mb-2">Sua Pergunta sobre a Seleção:</label>
+                <div class="flex gap-2">
+                    <input type="text" id="custom-prompt" class="flex-grow border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:border-blue-500" placeholder="Ex: Explique este gráfico... ou Traduza esta tabela...">
+                    <button id="btn-send-prompt" class="bg-blue-600 text-white px-4 py-2 rounded text-sm hover:bg-blue-700">Enviar</button>
+                </div>
+            </div>
+
+            <div id="modal-body" class="p-6 text-gray-700 overflow-y-auto flex-grow" style="white-space: pre-line;">
+                <!-- Conteúdo injetado -->
+            </div>
+        </div>
+    </div>
+    <script src="script.js"></script>
+
+</body>
+</html>
